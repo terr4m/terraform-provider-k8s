@@ -414,8 +414,9 @@ resource "k8s_resource" "test" {
         }
         spec = {
           containers = [{
-            name = "nginx"
-            image = "docker.io/nginx:latest"
+            name            = "nginx"
+            image           = "docker.io/nginx:latest"
+            imagePullPolicy = "IfNotPresent"
             ports = [{
               containerPort = 80
             }]
@@ -483,8 +484,9 @@ resource "k8s_resource" "test" {
         }
         spec = {
           containers = [{
-            name = "nginx"
-            image = "docker.io/nginx:latest"
+            name            = "nginx"
+            image           = "docker.io/nginx:latest"
+            imagePullPolicy = "IfNotPresent"
             ports = [{
               containerPort = 80
             }]

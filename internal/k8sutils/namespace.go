@@ -14,7 +14,12 @@ func NamespaceEmptyOrExists(ctx context.Context, client *Client, namespace strin
 		return true, nil
 	}
 
-	nsri, err := client.ResourceInterface("v1", "Namespace", "", false)
+	gvk, err := ParseGVK("v1", "Namespace")
+	if err != nil {
+		return false, err
+	}
+
+	nsri, err := client.ResourceInterface(gvk, "", false)
 	if err != nil {
 		return false, fmt.Errorf("failed to get namespace resource interface: %w", err)
 	}

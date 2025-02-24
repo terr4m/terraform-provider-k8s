@@ -110,7 +110,13 @@ func (d *ResourcesDataSource) Read(ctx context.Context, req datasource.ReadReque
 		return
 	}
 
-	ri, err := d.providerData.Client.ResourceInterface(data.APIVersion.ValueString(), data.Kind.ValueString(), data.Namespace.ValueString(), false)
+	gvk, err := k8sutils.ParseGVK(data.APIVersion.ValueString(), data.Kind.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to parse GVK.", err.Error())
+		return
+	}
+
+	ri, err := d.providerData.Client.ResourceInterface(gvk, data.Namespace.ValueString(), false)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to configure dynamic client.", err.Error())
 		return
@@ -141,9 +147,9 @@ func (d *ResourcesDataSource) Read(ctx context.Context, req datasource.ReadReque
 		return
 	}
 
-	col, diags := tfutils.DecodeDynamic(ctx, k8sutils.UnstructuredListToObjects(l))
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
+	col, err := tfutils.DecodeDynamic(ctx, nil, k8sutils.UnstructuredListToObjects(l))
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to decode resources.", err.Error())
 		return
 	}
 	data.Objects = col

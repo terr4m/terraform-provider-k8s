@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/terr4m/terraform-provider-k8s/internal/k8sutils"
 	"github.com/terr4m/terraform-provider-k8s/internal/tfutils"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
@@ -99,7 +100,13 @@ func (d *ResourceDataSource) Read(ctx context.Context, req datasource.ReadReques
 		return
 	}
 
-	ri, err := d.providerData.Client.ResourceInterface(data.APIVersion.ValueString(), data.Kind.ValueString(), data.Namespace.ValueString(), true)
+	gvk, err := k8sutils.ParseGVK(data.APIVersion.ValueString(), data.Kind.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to parse GVK.", err.Error())
+		return
+	}
+
+	ri, err := d.providerData.Client.ResourceInterface(gvk, data.Namespace.ValueString(), true)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to configure dynamic client.", err.Error())
 		return
@@ -119,9 +126,9 @@ func (d *ResourceDataSource) Read(ctx context.Context, req datasource.ReadReques
 		return
 	}
 
-	obj, diags := tfutils.DecodeDynamic(ctx, o.Object)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
+	obj, err := tfutils.DecodeDynamic(ctx, nil, o.Object)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to decode resource object.", err.Error())
 		return
 	}
 	data.Object = obj

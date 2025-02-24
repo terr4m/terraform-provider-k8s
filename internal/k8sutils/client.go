@@ -9,6 +9,7 @@ import (
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/openapi"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
 	aggregator "k8s.io/kube-aggregator/pkg/client/clientset_generated/clientset"
@@ -27,6 +28,7 @@ type Client struct {
 	config              *rest.Config
 	aggregatorClientset *aggregator.Clientset
 	discoveryClient     discovery.DiscoveryInterface
+	openapiClient       openapi.Client
 	dynamicClient       dynamic.Interface
 	restMapper          meta.RESTMapper
 }
@@ -60,6 +62,21 @@ func (c *Client) DiscoveryClient() (discovery.DiscoveryInterface, error) {
 		c.discoveryClient = kc
 	}
 	return c.discoveryClient, nil
+}
+
+// OpenAPIClient returns an OpenAPI K8s client.
+func (c *Client) OpenAPIClient() (openapi.Client, error) {
+	if c.openapiClient != nil {
+		return c.openapiClient, nil
+	}
+
+	dc, err := c.DiscoveryClient()
+	if err != nil {
+		return nil, err
+	}
+
+	c.openapiClient = dc.OpenAPIV3()
+	return c.openapiClient, nil
 }
 
 // DynamicClient returns a dynamic K8s client.
@@ -118,18 +135,13 @@ func (c *Client) CheckGVK(apiVersion, kind string) (bool, error) {
 }
 
 // ResourceInterface returns a resource interface for a given api version and kind.
-func (c *Client) ResourceInterface(apiVersion, kind, namespace string, defaultNamespace bool) (dynamic.ResourceInterface, error) {
+func (c *Client) ResourceInterface(gvk *schema.GroupVersionKind, namespace string, defaultNamespace bool) (dynamic.ResourceInterface, error) {
 	mapper, err := c.RESTMapper()
 	if err != nil {
 		return nil, err
 	}
 
-	gv, err := schema.ParseGroupVersion(apiVersion)
-	if err != nil {
-		return nil, err
-	}
-
-	mapping, err := mapper.RESTMapping(gv.WithKind(kind).GroupKind(), gv.Version)
+	mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -150,4 +162,28 @@ func (c *Client) ResourceInterface(apiVersion, kind, namespace string, defaultNa
 	}
 
 	return dyn.Resource(mapping.Resource), nil
+}
+
+// GetGVOpenAPISchemaLookup returns the schema lookup for the given GV key.
+func (c *Client) GetGVOpenAPISchemaLookup(gvk *schema.GroupVersionKind) (openapi.GroupVersion, error) {
+	oc, err := c.OpenAPIClient()
+	if err != nil {
+		return nil, err
+	}
+
+	paths, err := oc.Paths()
+	if err != nil {
+		return nil, err
+	}
+
+	key := "api"
+	if len(gvk.Group) > 0 {
+		key = fmt.Sprintf("%ss/%s", key, gvk.Group)
+	}
+
+	if len(gvk.Version) > 0 {
+		key = fmt.Sprintf("%s/%s", key, gvk.Version)
+	}
+
+	return paths[key], nil
 }

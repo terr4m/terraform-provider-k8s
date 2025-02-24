@@ -292,7 +292,24 @@ func (r *ResourceResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		return
 	}
 
-	var unknownPaths path.Paths
+	var ignoreFields path.Expressions
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("creationTimestamp"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("deletionGracePeriodSeconds"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("deletionTimestamp"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("finalizers"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("generateName"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("generation"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("managedFields")) // .AtAnyListIndex().AtName("time"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("minReadySeconds"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("ownerReferences"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("paused"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("resourceVersion"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("selfLink"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("status"))
+
+	var unknownFields path.Expressions
+	unknownFields = unknownFields.Append(path.MatchRoot("metadata").AtName("annotations"))
+
 	if !req.State.Raw.IsNull() {
 		resp.RequiresReplace = append(resp.RequiresReplace,
 			path.Root("manifest").AtName("kind"),
@@ -316,7 +333,7 @@ func (r *ResourceResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 			resp.RequiresReplace = append(resp.RequiresReplace, path.Root("manifest").AtName("metadata").AtName("namespace"))
 		}
 	} else {
-		unknownPaths = unknownPaths.Append(path.Root("metadata").AtName("uid"))
+		unknownFields = unknownFields.Append(path.MatchRoot("metadata").AtName("uid"))
 	}
 
 	if !tfutils.IsFullyKnown(plan.Manifest) {
@@ -344,7 +361,13 @@ func (r *ResourceResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 	}
 
 	if gvkExists && checkNamespace {
-		ri, err := r.providerData.Client.ResourceInterface(u.GetAPIVersion(), u.GetKind(), namespace, true)
+		gvk, err := k8sutils.ParseGVK(u.GetAPIVersion(), u.GetKind())
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to parse GVK.", err.Error())
+			return
+		}
+
+		ri, err := r.providerData.Client.ResourceInterface(gvk, namespace, true)
 		if err != nil {
 			resp.Diagnostics.AddError("Failed to configure dynamic client.", err.Error())
 			return
@@ -380,15 +403,27 @@ func (r *ResourceResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 			return
 		}
 
-		a := o.Object
-		if err = k8sutils.RemoveServerSideFields(opts.FieldManager, m, a, false, true); err != nil {
-			resp.Diagnostics.AddError("Failed to remove server-side fields.", err.Error())
+		// a := o.Object
+		// if err = k8sutils.RemoveServerSideFields(opts.FieldManager, m, a, false, false); err != nil {
+		// 	resp.Diagnostics.AddError("Failed to remove server-side fields.", err.Error())
+		// 	return
+		// }
+
+		ogv, err := r.providerData.Client.GetGVOpenAPISchemaLookup(gvk)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to get schema lookup.", err.Error())
 			return
 		}
 
-		obj, diags := tfutils.DecodeDynamic(ctx, a, unknownPaths...)
-		resp.Diagnostics.Append(diags...)
-		if resp.Diagnostics.HasError() {
+		sc, err := k8sutils.GetOpenAPISchema(ogv, gvk)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to get schema.", err.Error())
+			return
+		}
+
+		obj, err := tfutils.DecodeDynamicWithTypeAndUnknowns(ctx, sc, ignoreFields, unknownFields, o.Object)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to decode value.", err.Error())
 			return
 		}
 
@@ -412,10 +447,14 @@ func (r *ResourceResource) Create(ctx context.Context, req resource.CreateReques
 	}
 	u := &unstructured.Unstructured{Object: m}
 
-	kind := u.GetKind()
 	name := u.GetName()
+	gvk, err := k8sutils.ParseGVK(u.GetAPIVersion(), u.GetKind())
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to parse GVK.", err.Error())
+		return
+	}
 
-	ri, err := r.providerData.Client.ResourceInterface(u.GetAPIVersion(), kind, u.GetNamespace(), true)
+	ri, err := r.providerData.Client.ResourceInterface(gvk, u.GetNamespace(), true)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to configure dynamic client.", err.Error())
 		return
@@ -480,7 +519,7 @@ func (r *ResourceResource) Create(ctx context.Context, req resource.CreateReques
 			return
 		}
 
-		u, err := k8sutils.WatchForAddedModified(ctx, watcher, conds, data.WaitOptions.Rollout.ValueBool(), kind)
+		u, err := k8sutils.WatchForAddedModified(ctx, watcher, conds, data.WaitOptions.Rollout.ValueBool(), gvk.Kind)
 		if err != nil {
 			resp.Diagnostics.AddError("Failed to wait for resource.", err.Error())
 			return
@@ -488,17 +527,45 @@ func (r *ResourceResource) Create(ctx context.Context, req resource.CreateReques
 		o = u
 	}
 
-	a := o.Object
-	if err = k8sutils.RemoveServerSideFields(opts.FieldManager, m, a, false, true); err != nil {
-		resp.Diagnostics.AddError("Failed to remove server-side fields.", err.Error())
+	// a := o.Object
+	// if err = k8sutils.RemoveServerSideFields(opts.FieldManager, m, a, false, false); err != nil {
+	// 	resp.Diagnostics.AddError("Failed to remove server-side fields.", err.Error())
+	// 	return
+	// }
+
+	ogv, err := r.providerData.Client.GetGVOpenAPISchemaLookup(gvk)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to get schema lookup.", err.Error())
 		return
 	}
 
-	obj, diags := tfutils.DecodeDynamic(ctx, a)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
+	sc, err := k8sutils.GetOpenAPISchema(ogv, gvk)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to get schema.", err.Error())
 		return
 	}
+
+	var ignoreFields path.Expressions
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("creationTimestamp"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("deletionGracePeriodSeconds"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("deletionTimestamp"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("finalizers"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("generateName"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("generation"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("managedFields")) // .AtAnyListIndex().AtName("time"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("minReadySeconds"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("ownerReferences"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("paused"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("resourceVersion"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("selfLink"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("status"))
+
+	obj, err := tfutils.DecodeDynamicWithType(ctx, sc, ignoreFields, o.Object)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to decode value.", err.Error())
+		return
+	}
+
 	data.Object = obj
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -518,7 +585,13 @@ func (r *ResourceResource) Read(ctx context.Context, req resource.ReadRequest, r
 	}
 	u := &unstructured.Unstructured{Object: m}
 
-	ri, err := r.providerData.Client.ResourceInterface(u.GetAPIVersion(), u.GetKind(), u.GetNamespace(), true)
+	gvk, err := k8sutils.ParseGVK(u.GetAPIVersion(), u.GetKind())
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to parse GVK.", err.Error())
+		return
+	}
+
+	ri, err := r.providerData.Client.ResourceInterface(gvk, u.GetNamespace(), true)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to configure dynamic client.", err.Error())
 		return
@@ -542,24 +615,52 @@ func (r *ResourceResource) Read(ctx context.Context, req resource.ReadRequest, r
 		resp.Diagnostics.AddWarning("Failed to get resource.", err.Error())
 		data.Object = types.DynamicNull()
 	} else {
-		var fieldManager string
-		if data.FieldManager != nil && !data.FieldManager.Name.IsNull() {
-			fieldManager = data.FieldManager.Name.ValueString()
-		} else {
-			fieldManager = r.providerData.FieldManager.Name
-		}
+		// var fieldManager string
+		// if data.FieldManager != nil && !data.FieldManager.Name.IsNull() {
+		// 	fieldManager = data.FieldManager.Name.ValueString()
+		// } else {
+		// 	fieldManager = r.providerData.FieldManager.Name
+		// }
 
-		a := o.Object
-		if err = k8sutils.RemoveServerSideFields(fieldManager, m, a, false, true); err != nil {
-			resp.Diagnostics.AddError("Failed to remove server-side fields.", err.Error())
+		// a := o.Object
+		// if err = k8sutils.RemoveServerSideFields(fieldManager, m, a, false, false); err != nil {
+		// 	resp.Diagnostics.AddError("Failed to remove server-side fields.", err.Error())
+		// 	return
+		// }
+
+		ogv, err := r.providerData.Client.GetGVOpenAPISchemaLookup(gvk)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to get schema lookup.", err.Error())
 			return
 		}
 
-		obj, diags := tfutils.DecodeDynamic(ctx, a)
-		resp.Diagnostics.Append(diags...)
-		if resp.Diagnostics.HasError() {
+		sc, err := k8sutils.GetOpenAPISchema(ogv, gvk)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to get schema.", err.Error())
 			return
 		}
+
+		var ignoreFields path.Expressions
+		ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("creationTimestamp"))
+		ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("deletionGracePeriodSeconds"))
+		ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("deletionTimestamp"))
+		ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("finalizers"))
+		ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("generateName"))
+		ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("generation"))
+		ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("managedFields")) // .AtAnyListIndex().AtName("time"))
+		ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("minReadySeconds"))
+		ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("ownerReferences"))
+		ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("paused"))
+		ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("resourceVersion"))
+		ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("selfLink"))
+		ignoreFields = ignoreFields.Append(path.MatchRoot("status"))
+
+		obj, err := tfutils.DecodeDynamicWithType(ctx, sc, ignoreFields, o.Object)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to decode value.", err.Error())
+			return
+		}
+
 		data.Object = obj
 	}
 
@@ -580,10 +681,14 @@ func (r *ResourceResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 	u := &unstructured.Unstructured{Object: m}
 
-	kind := u.GetKind()
 	name := u.GetName()
+	gvk, err := k8sutils.ParseGVK(u.GetAPIVersion(), u.GetKind())
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to parse GVK.", err.Error())
+		return
+	}
 
-	ri, err := r.providerData.Client.ResourceInterface(u.GetAPIVersion(), kind, u.GetNamespace(), true)
+	ri, err := r.providerData.Client.ResourceInterface(gvk, u.GetNamespace(), true)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to configure dynamic client.", err.Error())
 		return
@@ -639,7 +744,7 @@ func (r *ResourceResource) Update(ctx context.Context, req resource.UpdateReques
 			return
 		}
 
-		u, err := k8sutils.WatchForAddedModified(ctx, watcher, conds, data.WaitOptions.Rollout.ValueBool(), kind)
+		u, err := k8sutils.WatchForAddedModified(ctx, watcher, conds, data.WaitOptions.Rollout.ValueBool(), gvk.Kind)
 		if err != nil {
 			resp.Diagnostics.AddError("Failed to wait for resource.", err.Error())
 			return
@@ -647,17 +752,45 @@ func (r *ResourceResource) Update(ctx context.Context, req resource.UpdateReques
 		o = u
 	}
 
-	a := o.Object
-	if err = k8sutils.RemoveServerSideFields(opts.FieldManager, m, a, false, true); err != nil {
-		resp.Diagnostics.AddError("Failed to remove server-side fields.", err.Error())
+	// a := o.Object
+	// if err = k8sutils.RemoveServerSideFields(opts.FieldManager, m, a, false, false); err != nil {
+	// 	resp.Diagnostics.AddError("Failed to remove server-side fields.", err.Error())
+	// 	return
+	// }
+
+	ogv, err := r.providerData.Client.GetGVOpenAPISchemaLookup(gvk)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to get schema lookup.", err.Error())
 		return
 	}
 
-	obj, diags := tfutils.DecodeDynamic(ctx, a)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
+	sc, err := k8sutils.GetOpenAPISchema(ogv, gvk)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to get schema.", err.Error())
 		return
 	}
+
+	var ignoreFields path.Expressions
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("creationTimestamp"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("deletionGracePeriodSeconds"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("deletionTimestamp"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("finalizers"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("generateName"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("generation"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("managedFields")) // .AtAnyListIndex().AtName("time"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("minReadySeconds"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("ownerReferences"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("paused"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("resourceVersion"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("metadata").AtName("selfLink"))
+	ignoreFields = ignoreFields.Append(path.MatchRoot("status"))
+
+	obj, err := tfutils.DecodeDynamicWithType(ctx, sc, ignoreFields, o.Object)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to decode value.", err.Error())
+		return
+	}
+
 	data.Object = obj
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -677,7 +810,13 @@ func (r *ResourceResource) Delete(ctx context.Context, req resource.DeleteReques
 	}
 	u := &unstructured.Unstructured{Object: m}
 
-	ri, err := r.providerData.Client.ResourceInterface(u.GetAPIVersion(), u.GetKind(), u.GetNamespace(), true)
+	gvk, err := k8sutils.ParseGVK(u.GetAPIVersion(), u.GetKind())
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to parse GVK.", err.Error())
+		return
+	}
+
+	ri, err := r.providerData.Client.ResourceInterface(gvk, u.GetNamespace(), true)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to configure dynamic client.", err.Error())
 		return
@@ -760,9 +899,9 @@ func (r *ResourceResource) ImportState(ctx context.Context, req resource.ImportS
 		}
 	}
 
-	obj, diags := tfutils.DecodeDynamic(ctx, a)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
+	obj, err := tfutils.DecodeDynamic(ctx, nil, a)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to decode import identifier.", err.Error())
 		return
 	}
 
