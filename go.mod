@@ -4,17 +4,17 @@ go 1.24.0
 
 require (
 	github.com/google/go-cmp v0.7.0
-	github.com/hashicorp/terraform-plugin-framework v1.15.0
+	github.com/hashicorp/terraform-plugin-framework v1.15.1
 	github.com/hashicorp/terraform-plugin-framework-timeouts v0.5.0
 	github.com/hashicorp/terraform-plugin-go v0.28.0
 	github.com/hashicorp/terraform-plugin-testing v1.13.2
 	github.com/mitchellh/go-homedir v1.1.0
-	k8s.io/apimachinery v0.33.2
-	k8s.io/client-go v0.33.2
-	k8s.io/kube-aggregator v0.33.2
+	k8s.io/apimachinery v0.33.3
+	k8s.io/client-go v0.33.3
+	k8s.io/kube-aggregator v0.33.3
 )
 
-require k8s.io/api v0.33.2 // indirect
+require k8s.io/api v0.33.3 // indirect
 
 require (
 	github.com/ProtonMail/go-crypto v1.1.6 // indirect
