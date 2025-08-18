@@ -7,14 +7,14 @@ require (
 	github.com/hashicorp/terraform-plugin-framework v1.15.1
 	github.com/hashicorp/terraform-plugin-framework-timeouts v0.5.0
 	github.com/hashicorp/terraform-plugin-go v0.28.0
-	github.com/hashicorp/terraform-plugin-testing v1.13.2
+	github.com/hashicorp/terraform-plugin-testing v1.13.3
 	github.com/mitchellh/go-homedir v1.1.0
-	k8s.io/apimachinery v0.33.3
-	k8s.io/client-go v0.33.3
-	k8s.io/kube-aggregator v0.33.3
+	k8s.io/apimachinery v0.33.4
+	k8s.io/client-go v0.33.4
+	k8s.io/kube-aggregator v0.33.4
 )
 
-require k8s.io/api v0.33.3 // indirect
+require k8s.io/api v0.33.4 // indirect
 
 require (
 	github.com/ProtonMail/go-crypto v1.1.6 // indirect
