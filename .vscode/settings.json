@@ -1,7 +1,0 @@
-{
-  "go.testEnvVars": {
-    "TF_ACC": "1",
-    "KUBE_CONFIG_PATH": "~/.kube/config"
-  },
-  "go.testTimeout": "1m",
-}
