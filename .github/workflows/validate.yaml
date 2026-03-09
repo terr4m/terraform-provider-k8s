@@ -26,7 +26,7 @@ jobs:
         shell: bash
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup rumdl
         uses: action-stars/install-tool-from-github-release@1fa61c3bea52eca3bcdb1f5c961a3b113fe7fa54 # v0.2.6
@@ -75,7 +75,7 @@ jobs:
         shell: bash
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup Go
         uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
@@ -152,7 +152,7 @@ jobs:
       KUBE_CONFIG_PATH: ${{ github.workspace }}/.kube/config
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install Crane
         uses: imjasonh/setup-crane@6da1ae018866400525525ce74ff892880c099987 # v0.5
