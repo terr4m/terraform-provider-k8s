@@ -3,7 +3,10 @@ package provider
 import (
 	"fmt"
 
+	"github.com/terr4m/terraform-provider-k8s/internal/k8sutils"
+
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/dynamic"
@@ -104,4 +107,34 @@ func (c *K8sProviderClient) RESTMapper() (meta.ResettableRESTMapper, error) {
 	c.restMapper = restmapper.NewDeferredDiscoveryRESTMapper(dc)
 
 	return c.restMapper, nil
+}
+
+// ResourceInterface returns a dynamic resource interface for the input group version kind.
+func (c *K8sProviderClient) ResourceInterface(gvk *schema.GroupVersionKind, namespace string, requireNamespace bool) (dynamic.ResourceInterface, error) {
+	rm, err := c.RESTMapper()
+	if err != nil {
+		return nil, err
+	}
+
+	m, err := k8sutils.GetMapping(rm, gvk)
+	if err != nil {
+		return nil, err
+	}
+
+	dc, err := c.DynamicClient()
+	if err != nil {
+		return nil, err
+	}
+
+	return k8sutils.GetResourceInterface(dc, m, requireNamespace, namespace)
+}
+
+// InvalidateCache resets the deferred discovery REST mapper.
+func (c *K8sProviderClient) InvalidateCache() {
+	if c.restMapper != nil {
+		c.restMapper.Reset()
+	}
+	if c.discoveryClient != nil {
+		c.discoveryClient.Invalidate()
+	}
 }

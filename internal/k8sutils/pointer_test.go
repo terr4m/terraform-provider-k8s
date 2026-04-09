@@ -39,7 +39,7 @@ func TestPtr(t *testing.T) {
 
 			want := &d.in
 
-			got := Ptr(d.in)
+			got := new(d.in)
 
 			if diff := cmp.Diff(want, got); diff != "" {
 				t.Errorf(

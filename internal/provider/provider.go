@@ -15,9 +15,11 @@ import (
 )
 
 // Ensure K8sProvider satisfies various provider interfaces.
-var _ provider.Provider = &K8sProvider{}
-var _ provider.ProviderWithFunctions = &K8sProvider{}
-var _ provider.ProviderWithEphemeralResources = &K8sProvider{}
+var (
+	_ provider.Provider                       = &K8sProvider{}
+	_ provider.ProviderWithFunctions          = &K8sProvider{}
+	_ provider.ProviderWithEphemeralResources = &K8sProvider{}
+)
 
 // New returns a new provider implementation.
 func New(version, commit string) func() provider.Provider {
@@ -201,13 +203,13 @@ func (p *K8sProvider) Schema(ctx context.Context, req provider.SchemaRequest, re
 			},
 			"timeouts": timeouts.Attributes(ctx, timeouts.Opts{
 				Create:            true,
-				CreateDescription: "Timeout for resource creation; defaults to `10m`. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
+				CreateDescription: "Timeout for resource creation; defaults to `10m`. This should be a string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
 				Read:              true,
-				ReadDescription:   "Timeout for resource or data source reads; defaults to `10m`. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
+				ReadDescription:   "Timeout for resource or data source reads; defaults to `10m`. This should be a string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
 				Update:            true,
-				UpdateDescription: "Timeout for resource update; defaults to `10m`. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
+				UpdateDescription: "Timeout for resource update; defaults to `10m`. This should be a string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
 				Delete:            true,
-				DeleteDescription: "Timeout for resource deletion; defaults to `10m`. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
+				DeleteDescription: "Timeout for resource deletion; defaults to `10m`. This should be a string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
 			}),
 		},
 	}
@@ -287,7 +289,9 @@ func (p *K8sProvider) Configure(ctx context.Context, req provider.ConfigureReque
 
 // Resources returns the provider resources.
 func (p *K8sProvider) Resources(ctx context.Context) []func() resource.Resource {
-	return []func() resource.Resource{}
+	return []func() resource.Resource{
+		NewResourceResource,
+	}
 }
 
 // EphemeralResources returns the provider ephemeral resources.
