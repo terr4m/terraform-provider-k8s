@@ -15,8 +15,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var _ datasource.DataSource = &ResourceDataSource{}
-var _ datasource.DataSourceWithConfigure = &ResourceDataSource{}
+var (
+	_ datasource.DataSource              = &ResourceDataSource{}
+	_ datasource.DataSourceWithConfigure = &ResourceDataSource{}
+)
 
 // NewResourceDataSource creates a new resource data source.
 func NewResourceDataSource() datasource.DataSource {
@@ -70,7 +72,7 @@ func (d *ResourceDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 			},
 			"timeouts": timeouts.Attributes(ctx, timeouts.Opts{
 				Read:            true,
-				ReadDescription: "Timeout for reading the data source; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
+				ReadDescription: "Timeout for reading the data source; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
 			}),
 		},
 	}
