@@ -11,7 +11,7 @@ import (
 // ParseGVK parses the input API version and kind into a GroupVersionKind.
 func ParseGVK(apiVersion, kind string) (*schema.GroupVersionKind, error) {
 	if len(apiVersion) == 0 {
-		return nil, fmt.Errorf("no API version provided")
+		return nil, fmt.Errorf("no api version provided")
 	}
 
 	gv, err := schema.ParseGroupVersion(apiVersion)

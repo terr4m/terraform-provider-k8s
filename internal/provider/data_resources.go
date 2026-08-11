@@ -16,8 +16,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var _ datasource.DataSource = &ResourcesDataSource{}
-var _ datasource.DataSourceWithConfigure = &ResourcesDataSource{}
+var (
+	_ datasource.DataSource              = &ResourcesDataSource{}
+	_ datasource.DataSourceWithConfigure = &ResourcesDataSource{}
+)
 
 // NewResourcesDataSource creates a new server version data source.
 func NewResourcesDataSource() datasource.DataSource {
@@ -42,12 +44,12 @@ type ResourcesDataSourceModel struct {
 }
 
 // Metadata returns the data source metadata.
-func (d *ResourcesDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+func (d *ResourcesDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = fmt.Sprintf("%s_resources", req.ProviderTypeName)
 }
 
 // Schema returns the data source schema.
-func (d *ResourcesDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *ResourcesDataSource) Schema(ctx context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "_Kubernetes_ resources TF data source.",
 		Attributes: map[string]schema.Attribute{
@@ -88,7 +90,7 @@ func (d *ResourcesDataSource) Schema(ctx context.Context, req datasource.SchemaR
 }
 
 // Configure configures the data source.
-func (d *ResourcesDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *ResourcesDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}

@@ -35,12 +35,12 @@ type ServerVersionDataSourceModel struct {
 }
 
 // Metadata returns the data source metadata.
-func (d *ServerVersionDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+func (d *ServerVersionDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = fmt.Sprintf("%s_server_version", req.ProviderTypeName)
 }
 
 // Schema returns the data source schema.
-func (d *ServerVersionDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *ServerVersionDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "_Kubernetes_ server version data source.",
 		Attributes: map[string]schema.Attribute{
@@ -85,7 +85,7 @@ func (d *ServerVersionDataSource) Schema(ctx context.Context, req datasource.Sch
 }
 
 // Configure configures the data source.
-func (d *ServerVersionDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *ServerVersionDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
