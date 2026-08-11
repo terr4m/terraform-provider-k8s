@@ -26,25 +26,10 @@ jobs:
         shell: bash
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-
-      - name: Setup rumdl
-        uses: action-stars/install-tool-from-github-release@1fa61c3bea52eca3bcdb1f5c961a3b113fe7fa54 # v0.2.6
-        with:
-          github_token: ${{ github.token }}
-          owner: rvben
-          repository: rumdl
-          filename_format: "{name}-v{version}-{arch}-{os}.{ext}"
-          arch_amd64: x86_64
-          os_linux: unknown-linux-gnu
-          check_command: rumdl --version
-          version: latest
-
-      - name: Lint markdown
-        run: rumdl check --output-format github .
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Go
-        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: false
@@ -53,7 +38,7 @@ jobs:
         run: go mod download
 
       - name: Run linters
-        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: latest
           args: --timeout=10m
@@ -65,6 +50,11 @@ jobs:
           mkdir -p ./dist
           go build -o ./dist -v .
 
+      - name: Lint markdown
+        uses: rvben/rumdl@9faf4696d56c0cff426a2f85b3fd476ebe0d0ec0 # v0.2.52
+        with:
+          report-type: annotations
+
   generate:
     name: Generate
     runs-on: ubuntu-latest
@@ -75,16 +65,16 @@ jobs:
         shell: bash
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Go
-        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: tools/go.mod
           cache: false
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: latest
           terraform_wrapper: false
@@ -152,10 +142,10 @@ jobs:
       KUBE_CONFIG_PATH: ${{ github.workspace }}/.kube/config
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Crane
-        uses: imjasonh/setup-crane@6da1ae018866400525525ce74ff892880c099987 # v0.5
+        uses: imjasonh/setup-crane@feee3b6bb0d4c68370f256a4502498c9227e5c6b # v0.7
 
       - name: Setup
         id: setup
@@ -172,23 +162,26 @@ jobs:
           echo "kind_node_tag=${kind_node_tag}" >> "${GITHUB_OUTPUT}"
 
       - name: Setup Go
-        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: false
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: ${{ matrix.tf_version }}
           terraform_wrapper: false
 
-      - name: Terraform Path
+      - name: Terraform Lookup
         id: tf
         run: |
           set -euo pipefail
 
-          echo "path=$(command -v terraform || true)" >> "${GITHUB_OUTPUT}"
+          {
+            echo "version=$(terraform version -json | jq --raw-output '.terraform_version')"
+            echo "path=$(command -v terraform || true)"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Create Kind cluster
         uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
