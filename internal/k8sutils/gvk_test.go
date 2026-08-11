@@ -2,11 +2,11 @@ package k8sutils
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
@@ -15,12 +15,12 @@ import (
 func TestParseGVK(t *testing.T) {
 	t.Parallel()
 
-	for _, d := range []struct {
+	for _, tt := range []struct {
 		testName   string
 		apiVersion string
 		kind       string
 		want       *schema.GroupVersionKind
-		errMsg     string
+		wantErr    *string
 	}{
 		{
 			testName:   "core_api_only",
@@ -51,44 +51,45 @@ func TestParseGVK(t *testing.T) {
 			apiVersion: "",
 			kind:       "",
 			want:       nil,
-			errMsg:     "no API version provided",
+			wantErr:    new("no api version provided"),
 		},
 		{
 			testName:   "no_api_version",
 			apiVersion: "",
 			kind:       "Deployment",
 			want:       nil,
-			errMsg:     "no API version provided",
+			wantErr:    new("no api version provided"),
 		},
 		{
 			testName:   "invalid_api_version",
 			apiVersion: "a/b/c",
 			kind:       "",
 			want:       nil,
-			errMsg:     "unexpected GroupVersion string: a/b/c",
+			wantErr:    new("unexpected GroupVersion string: a/b/c"),
 		},
 	} {
-		t.Run(d.testName, func(t *testing.T) {
+		t.Run(tt.testName, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := ParseGVK(d.apiVersion, d.kind)
-
-			if diff := cmp.Diff(d.want, got); diff != "" {
-				t.Errorf(
-					"ParseGVK returned:\n%v\nwant:\n%v\ndiff:\n%v",
-					got,
-					d.want,
-					diff,
-				)
-			}
-
-			var errMsg string
+			got, err := ParseGVK(tt.apiVersion, tt.kind)
 			if err != nil {
-				errMsg = err.Error()
+				if tt.wantErr == nil {
+					t.Errorf("ParseGVK() returned unexpected error: %v", err)
+				}
+
+				if !regexp.MustCompile(regexp.QuoteMeta(*tt.wantErr)).MatchString(err.Error()) {
+					t.Errorf("ParseGVK() returned error %q, want %q", err.Error(), *tt.wantErr)
+				}
+
+				return
 			}
 
-			if errMsg != d.errMsg {
-				t.Errorf("ParseGVK returned error message %q, want %q", errMsg, d.errMsg)
+			if tt.wantErr != nil {
+				t.Errorf("ParseGVK() returned no error, want %q", *tt.wantErr)
+			}
+
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("ParseGVK() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -97,33 +98,29 @@ func TestParseGVK(t *testing.T) {
 func TestCheckGVKExists(t *testing.T) {
 	t.Parallel()
 
-	for _, d := range []struct {
+	for _, tt := range []struct {
 		testName   string
 		apiVersion string
 		kind       string
-		mockSetup  func() discovery.DiscoveryInterface
+		dc         discovery.DiscoveryInterface
 		want       bool
-		errMsg     string
+		wantErr    *string
 	}{
 		{
 			testName:   "resource_exists",
 			apiVersion: "apps/v1",
 			kind:       "Deployment",
-			mockSetup: func() discovery.DiscoveryInterface {
-				return &discoveryClientStub{
-					serverResourcesForGroupVersionResult: struct {
-						resources *metav1.APIResourceList
-						err       error
-					}{
+			dc: &discoveryClientStub{
+				results: map[string]discoveryClientResult{
+					"apps/v1": {
 						resources: &metav1.APIResourceList{
 							GroupVersion: "apps/v1",
 							APIResources: []metav1.APIResource{
 								{Kind: "Deployment"},
 							},
 						},
-						err: nil,
 					},
-				}
+				},
 			},
 			want: true,
 		},
@@ -131,21 +128,17 @@ func TestCheckGVKExists(t *testing.T) {
 			testName:   "resource_not_found",
 			apiVersion: "apps/v1",
 			kind:       "Deploymentx",
-			mockSetup: func() discovery.DiscoveryInterface {
-				return &discoveryClientStub{
-					serverResourcesForGroupVersionResult: struct {
-						resources *metav1.APIResourceList
-						err       error
-					}{
+			dc: &discoveryClientStub{
+				results: map[string]discoveryClientResult{
+					"apps/v1": {
 						resources: &metav1.APIResourceList{
 							GroupVersion: "apps/v1",
 							APIResources: []metav1.APIResource{
 								{Kind: "Deployment"},
 							},
 						},
-						err: nil,
 					},
-				}
+				},
 			},
 			want: false,
 		},
@@ -153,15 +146,8 @@ func TestCheckGVKExists(t *testing.T) {
 			testName:   "group_version_not_found",
 			apiVersion: "apps/v2",
 			kind:       "Deployment",
-			mockSetup: func() discovery.DiscoveryInterface {
-				return &discoveryClientStub{
-					serverResourcesForGroupVersionResult: struct {
-						resources *metav1.APIResourceList
-						err       error
-					}{
-						err: errors.NewNotFound(schema.GroupResource{Group: "apps/v2"}, ""),
-					},
-				}
+			dc: &discoveryClientStub{
+				results: map[string]discoveryClientResult{},
 			},
 			want: false,
 		},
@@ -169,37 +155,40 @@ func TestCheckGVKExists(t *testing.T) {
 			testName:   "error",
 			apiVersion: "apps/v1",
 			kind:       "Deployment",
-			mockSetup: func() discovery.DiscoveryInterface {
-				return &discoveryClientStub{
-					serverResourcesForGroupVersionResult: struct {
-						resources *metav1.APIResourceList
-						err       error
-					}{
-						err: fmt.Errorf("server error"),
+			dc: &discoveryClientStub{
+				results: map[string]discoveryClientResult{
+					"apps/v1": {
+						resources: nil,
+						err:       fmt.Errorf("server error"),
 					},
-				}
+				},
 			},
-			want:   false,
-			errMsg: "server error",
+			want:    false,
+			wantErr: new("server error"),
 		},
 	} {
-		t.Run(d.testName, func(t *testing.T) {
+		t.Run(tt.testName, func(t *testing.T) {
 			t.Parallel()
 
-			dc := d.mockSetup()
-			got, err := CheckGVKExists(dc, d.apiVersion, d.kind)
-
-			if got != d.want {
-				t.Errorf("CheckGVKExists returned %t, want %t", got, d.want)
-			}
-
-			var errMsg string
+			got, err := CheckGVKExists(tt.dc, tt.apiVersion, tt.kind)
 			if err != nil {
-				errMsg = err.Error()
+				if tt.wantErr == nil {
+					t.Errorf("CheckGVKExists returned unexpected error: %v", err)
+				}
+
+				if !regexp.MustCompile(regexp.QuoteMeta(*tt.wantErr)).MatchString(err.Error()) {
+					t.Errorf("CheckGVKExists returned error %q, want %q", err.Error(), *tt.wantErr)
+				}
+
+				return
 			}
 
-			if errMsg != d.errMsg {
-				t.Errorf("CheckGVKExists returned error message %q, want %q", errMsg, d.errMsg)
+			if tt.wantErr != nil {
+				t.Errorf("CheckGVKExists returned no error, want %q", *tt.wantErr)
+			}
+
+			if got != tt.want {
+				t.Errorf("CheckGVKExists returned %t, want %t", got, tt.want)
 			}
 		})
 	}

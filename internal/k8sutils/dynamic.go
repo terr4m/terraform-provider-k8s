@@ -12,7 +12,7 @@ import (
 func GetMapping(m meta.RESTMapper, gvk *schema.GroupVersionKind) (*meta.RESTMapping, error) {
 	mapping, err := m.RESTMapping(gvk.GroupKind(), gvk.Version)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get REST mapping: %w", err)
+		return nil, fmt.Errorf("failed to get rest mapping: %w", err)
 	}
 	return mapping, nil
 }

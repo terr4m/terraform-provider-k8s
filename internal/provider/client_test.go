@@ -20,12 +20,7 @@ func TestNewK8sProviderClient(t *testing.T) {
 		got := NewK8sProviderClient(&restConfig)
 
 		if diff := cmp.Diff(&restConfig, got.restConfig); diff != "" {
-			t.Errorf(
-				"NewK8sProviderClient rest config:\n%v\nwant:\n%v\ndiff:\n%v",
-				got,
-				restConfig,
-				diff,
-			)
+			t.Errorf("NewK8sProviderClient() mismatch (-want +got):\n%s", diff)
 		}
 	})
 }

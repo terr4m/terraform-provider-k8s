@@ -43,12 +43,7 @@ func TestUnstructuredListToObjects(t *testing.T) {
 			got := UnstructuredListToObjects(d.in)
 
 			if diff := cmp.Diff(d.want, got); diff != "" {
-				t.Errorf(
-					"UnstructuredListToObjects returned:\n%v\nwant:\n%v\ndiff:\n%v",
-					got,
-					d.want,
-					diff,
-				)
+				t.Errorf("UnstructuredListToObjects() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

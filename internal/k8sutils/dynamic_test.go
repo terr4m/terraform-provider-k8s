@@ -2,6 +2,7 @@ package k8sutils
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -12,61 +13,58 @@ import (
 func TestGetMapping(t *testing.T) {
 	t.Parallel()
 
-	for _, d := range []struct {
-		testName  string
-		mockSetup func() *restMapperStub
-		gvk       *schema.GroupVersionKind
-		errMsg    string
+	for _, tt := range []struct {
+		testName string
+		mapper   meta.ResettableRESTMapper
+		gvk      *schema.GroupVersionKind
+		wantErr  *string
 	}{
 		{
 			testName: "success",
-			mockSetup: func() *restMapperStub {
-				return &restMapperStub{
-					restMappingResult: struct {
-						mapping *meta.RESTMapping
-						err     error
-					}{
+			mapper: &restMapperStub{
+				results: map[string]restMapperResult{
+					"deployment.apps": {
 						mapping: &meta.RESTMapping{},
-						err:     nil,
 					},
-				}
+				},
 			},
 			gvk: &schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"},
 		},
 		{
 			testName: "failure",
-			mockSetup: func() *restMapperStub {
-				return &restMapperStub{
-					restMappingResult: struct {
-						mapping *meta.RESTMapping
-						err     error
-					}{
-						mapping: nil,
-						err:     fmt.Errorf("server error"),
+			mapper: &restMapperStub{
+				results: map[string]restMapperResult{
+					"deployment.apps": {
+						err: fmt.Errorf("server error"),
 					},
-				}
+				},
 			},
-			gvk:    &schema.GroupVersionKind{Group: "apps", Version: "v2", Kind: "Deployment"},
-			errMsg: "failed to get REST mapping: server error",
+			gvk:     &schema.GroupVersionKind{Group: "apps", Version: "v2", Kind: "Deployment"},
+			wantErr: new("failed to get rest mapping: server error"),
 		},
 	} {
-		t.Run(d.testName, func(t *testing.T) {
+		t.Run(tt.testName, func(t *testing.T) {
 			t.Parallel()
 
-			m := d.mockSetup()
-			got, err := GetMapping(m, d.gvk)
-
-			if len(d.errMsg) == 0 && got == nil {
-				t.Errorf("GetMapping returned nil, want non-nil")
-			}
-
-			var errMsg string
+			got, err := GetMapping(tt.mapper, tt.gvk)
 			if err != nil {
-				errMsg = err.Error()
+				if tt.wantErr == nil {
+					t.Errorf("GetMapping() returned unexpected error: %v", err)
+				}
+
+				if !regexp.MustCompile(regexp.QuoteMeta(*tt.wantErr)).MatchString(err.Error()) {
+					t.Errorf("GetMapping() returned error %q, want %q", err.Error(), *tt.wantErr)
+				}
+
+				return
 			}
 
-			if errMsg != d.errMsg {
-				t.Errorf("GetMapping returned error message %q, want %q", errMsg, d.errMsg)
+			if tt.wantErr != nil {
+				t.Errorf("GetMapping() returned no error, want %q", *tt.wantErr)
+			}
+
+			if got == nil {
+				t.Errorf("GetMapping() returned nil, want non-nil")
 			}
 		})
 	}
@@ -75,91 +73,94 @@ func TestGetMapping(t *testing.T) {
 func TestGetResourceInterface(t *testing.T) {
 	t.Parallel()
 
-	for _, d := range []struct {
+	for _, tt := range []struct {
 		testName         string
-		mockSetup        func() dynamic.Interface
+		client           dynamic.Interface
 		mapping          *meta.RESTMapping
 		requireNamespace bool
 		namespace        string
-		errMsg           string
+		wantErr          *string
 	}{
 		{
 			testName: "non_namespaced",
-			mockSetup: func() dynamic.Interface {
-				return &dynamicClientStub{
-					resourceResult: resourceInterfaceStub{},
-				}
+			client: &dynamicClientStub{
+				results: map[string]dynamic.NamespaceableResourceInterface{
+					"rbac.authorization.k8s.io/v1/clusterroles": &resourceInterfaceStub{},
+				},
 			},
 			mapping: &meta.RESTMapping{
-				Scope: meta.RESTScopeRoot,
+				Resource: schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterroles"},
+				Scope:    meta.RESTScopeRoot,
 			},
-			requireNamespace: true,
+			requireNamespace: false,
 			namespace:        "",
 		},
 		{
 			testName: "namespaced",
-			mockSetup: func() dynamic.Interface {
-				return &dynamicClientStub{
-					resourceResult: resourceInterfaceStub{
-						namespaceResult: resourceInterfaceStub{},
-					},
-				}
+			client: &dynamicClientStub{
+				results: map[string]dynamic.NamespaceableResourceInterface{
+					"apps/v1/deployments": &resourceInterfaceStub{},
+				},
 			},
 			mapping: &meta.RESTMapping{
-				Scope: meta.RESTScopeNamespace,
+				Resource: schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"},
+				Scope:    meta.RESTScopeNamespace,
 			},
 			requireNamespace: true,
 			namespace:        "test",
 		},
 		{
 			testName: "namespaced_no_namespace_allowed",
-			mockSetup: func() dynamic.Interface {
-				return &dynamicClientStub{
-					resourceResult: resourceInterfaceStub{
-						namespaceResult: resourceInterfaceStub{},
-					},
-				}
+			client: &dynamicClientStub{
+				results: map[string]dynamic.NamespaceableResourceInterface{
+					"apps/v1/deployments": &resourceInterfaceStub{},
+				},
 			},
 			mapping: &meta.RESTMapping{
-				Scope: meta.RESTScopeNamespace,
+				Resource: schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"},
+				Scope:    meta.RESTScopeNamespace,
 			},
 			requireNamespace: false,
 			namespace:        "",
 		},
 		{
 			testName: "namespaced_namespace_missing",
-			mockSetup: func() dynamic.Interface {
-				return &dynamicClientStub{
-					resourceResult: resourceInterfaceStub{
-						namespaceResult: resourceInterfaceStub{},
-					},
-				}
+			client: &dynamicClientStub{
+				results: map[string]dynamic.NamespaceableResourceInterface{
+					"apps/v1/deployments": &resourceInterfaceStub{},
+				},
 			},
 			mapping: &meta.RESTMapping{
-				Scope: meta.RESTScopeNamespace,
+				Resource: schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"},
+				Scope:    meta.RESTScopeNamespace,
 			},
 			requireNamespace: true,
 			namespace:        "",
-			errMsg:           "namespace is required for namespaced resources",
+			wantErr:          new("namespace is required for namespaced resources"),
 		},
 	} {
-		t.Run(d.testName, func(t *testing.T) {
+		t.Run(tt.testName, func(t *testing.T) {
 			t.Parallel()
 
-			c := d.mockSetup()
-			got, err := GetResourceInterface(c, d.mapping, d.requireNamespace, d.namespace)
-
-			if len(d.errMsg) == 0 && got == nil {
-				t.Errorf("GetResourceInterface returned nil, want non-nil")
-			}
-
-			var errMsg string
+			got, err := GetResourceInterface(tt.client, tt.mapping, tt.requireNamespace, tt.namespace)
 			if err != nil {
-				errMsg = err.Error()
+				if tt.wantErr == nil {
+					t.Errorf("GetResourceInterface returned unexpected error: %v", err)
+				}
+
+				if !regexp.MustCompile(regexp.QuoteMeta(*tt.wantErr)).MatchString(err.Error()) {
+					t.Errorf("GetResourceInterface returned error %q, want %q", err.Error(), *tt.wantErr)
+				}
+
+				return
 			}
 
-			if errMsg != d.errMsg {
-				t.Errorf("GetResourceInterface returned error message %q, want %q", errMsg, d.errMsg)
+			if tt.wantErr != nil {
+				t.Errorf("GetResourceInterface returned nil error, want %q", *tt.wantErr)
+			}
+
+			if got == nil {
+				t.Errorf("GetResourceInterface returned nil, want non-nil")
 			}
 		})
 	}

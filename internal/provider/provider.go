@@ -15,9 +15,11 @@ import (
 )
 
 // Ensure K8sProvider satisfies various provider interfaces.
-var _ provider.Provider = &K8sProvider{}
-var _ provider.ProviderWithFunctions = &K8sProvider{}
-var _ provider.ProviderWithEphemeralResources = &K8sProvider{}
+var (
+	_ provider.Provider                       = &K8sProvider{}
+	_ provider.ProviderWithFunctions          = &K8sProvider{}
+	_ provider.ProviderWithEphemeralResources = &K8sProvider{}
+)
 
 // New returns a new provider implementation.
 func New(version, commit string) func() provider.Provider {
@@ -94,13 +96,13 @@ type K8sProvider struct {
 }
 
 // Metadata returns the provider metadata.
-func (p *K8sProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
+func (p *K8sProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
 	resp.TypeName = "k8s"
 	resp.Version = p.version
 }
 
 // Schema returns the provider schema.
-func (p *K8sProvider) Schema(ctx context.Context, req provider.SchemaRequest, resp *provider.SchemaResponse) {
+func (p *K8sProvider) Schema(ctx context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "The K8s provider provides a way to manage _Kubernetes_ resources using _Terraform_. It maps to the _Kubernetes_ API using server-side-apply and field management.",
 		Attributes: map[string]schema.Attribute{
@@ -286,17 +288,17 @@ func (p *K8sProvider) Configure(ctx context.Context, req provider.ConfigureReque
 }
 
 // Resources returns the provider resources.
-func (p *K8sProvider) Resources(ctx context.Context) []func() resource.Resource {
+func (p *K8sProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{}
 }
 
 // EphemeralResources returns the provider ephemeral resources.
-func (p *K8sProvider) EphemeralResources(ctx context.Context) []func() ephemeral.EphemeralResource {
+func (p *K8sProvider) EphemeralResources(_ context.Context) []func() ephemeral.EphemeralResource {
 	return []func() ephemeral.EphemeralResource{}
 }
 
 // DataSources returns the provider data sources.
-func (p *K8sProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
+func (p *K8sProvider) DataSources(_ context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		NewResourceDataSource,
 		NewResourcesDataSource,
@@ -305,6 +307,6 @@ func (p *K8sProvider) DataSources(ctx context.Context) []func() datasource.DataS
 }
 
 // Functions returns the provider functions.
-func (p *K8sProvider) Functions(ctx context.Context) []func() function.Function {
+func (p *K8sProvider) Functions(_ context.Context) []func() function.Function {
 	return []func() function.Function{}
 }
