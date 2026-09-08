@@ -51,7 +51,7 @@ jobs:
           go build -o ./dist -v .
 
       - name: Lint markdown
-        uses: rvben/rumdl@9faf4696d56c0cff426a2f85b3fd476ebe0d0ec0 # v0.2.52
+        uses: rvben/rumdl@394473d1af4484b1cfeed345304203658368e14b # v0.2.66
         with:
           report-type: annotations
 
@@ -184,7 +184,7 @@ jobs:
           } >> "${GITHUB_OUTPUT}"
 
       - name: Create Kind cluster
-        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
+        uses: helm/kind-action@06c1ae10762d3b9c1644e7fe69596ae519e015a2 # v1.15.0
         with:
           kubeconfig: ${{ env.KUBE_CONFIG_PATH }}
           node_image: kindest/node:${{ steps.setup.outputs.kind_node_tag }}
