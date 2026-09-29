@@ -9,12 +9,12 @@ require (
 	github.com/hashicorp/terraform-plugin-go v0.31.0
 	github.com/hashicorp/terraform-plugin-testing v1.16.0
 	github.com/mitchellh/go-homedir v1.1.0
-	k8s.io/apimachinery v0.37.0
-	k8s.io/client-go v0.37.0
-	k8s.io/kube-aggregator v0.37.0
+	k8s.io/apimachinery v0.37.1
+	k8s.io/client-go v0.37.1
+	k8s.io/kube-aggregator v0.37.1
 )
 
-require k8s.io/api v0.37.0 // indirect
+require k8s.io/api v0.37.1 // indirect
 
 require (
 	github.com/ProtonMail/go-crypto v1.4.1 // indirect
